@@ -1,0 +1,2 @@
+2023-11-09 16:15:19,066 [INFO]: Start synchronization from source to replica every 60 seconds.
+2023-11-09 16:15:19,066 [INFO]: source\file_num_1.txt has been copied to the replica.

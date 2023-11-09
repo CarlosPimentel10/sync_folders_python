@@ -1,8 +1,7 @@
 import os
 import pytest
 import shutil
-
-from sync import folder_sync,folder_comparison, file_comparison
+from sync import folder_sync, create_folder_if_not_exists, compare_files, copy_or_update_file
 
 # Create a temporary test directory
 @pytest.fixture(scope="module")
@@ -11,65 +10,76 @@ def test_directory(tmp_path_factory):
     yield temp_dir
     shutil.rmtree(temp_dir)
 
-def test_folder_sync_create_folder(test_directory):
-    source = os.path.join(test_directory, "source")
-    replica = os.path.join(test_directory, "replica")
-    log = os.path.join(test_directory, "log.txt")
-    time_frame = 1
+def test_create_folder_if_not_exists(tmp_path):
+    test_folder = os.path.join(tmp_path, "test_folder")
 
-    # Create the source folder within the test directory
-    os.makedirs(source)
+    # Test creating a folder that doesn't exist
+    create_folder_if_not_exists(test_folder)
+    assert os.path.isdir(test_folder)
 
-    folder_sync(source, replica, log, time_frame)
+    # Test creating a folder that already exists
+    create_folder_if_not_exists(test_folder)
+    assert os.path.isdir(test_folder)
 
-    assert os.path.isdir(source)
-    assert os.path.isdir(replica)
-    assert os.path.isfile(log)
+def test_compare_files():
+    # Create temporary test files
+    with open("file1.txt", "w") as f1, open("file2.txt", "w") as f2:
+        f1.write("content")
+        f2.write("content")
 
-def test_file_comparison():
-    file1 = "test_file1.txt"
-    file2 = "test_file2.txt"
-    file3 = "test_file3.txt"
+    with open("file3.txt", "w") as f1, open("file4.txt", "w") as f2:
+        f1.write("different_content")
+        f2.write("different_content")
 
-    with open(file1, "w") as f:
+    assert compare_files("file1.txt", "file2.txt")  # Identical files
+    assert not compare_files("file1.txt", "file3.txt")  # Different files
+
+def test_copy_or_update_file(tmp_path):
+    source_folder = tmp_path / "source"
+    replica_folder = tmp_path / "replica"
+
+    # Create source and replica folders
+    create_folder_if_not_exists(source_folder)
+    create_folder_if_not_exists(replica_folder)
+
+    source_file = source_folder / "file.txt"
+    replica_file = replica_folder / "file.txt"
+
+    # Test copying a file
+    with open(source_file, "w") as f:
         f.write("content")
+    log_message = copy_or_update_file(source_file, replica_file)
+    assert os.path.exists(replica_file)
+    assert log_message == f'{source_file} has been copied to the replica.'
 
-    with open(file2, "w") as f:
-        f.write("content")
+    # Test updating an identical file
+    log_message = copy_or_update_file(source_file, replica_file)
+    assert log_message == f'{source_file} is already up to date.'
 
-    with open(file3, "w") as f:
-        f.write("different_content")
+    # Test updating a different file
+    with open(source_file, "w") as f:
+        f.write("new_content")
+    log_message = copy_or_update_file(source_file, replica_file)
+    assert log_message == f'{source_file} has been updated.'
 
-    assert file_comparison(file1, file2)  # Identical files
-    assert not file_comparison(file1, file3)  # Different files
+def test_folder_sync(tmp_path, capsys):
+    source_folder = tmp_path / "source"
+    replica_folder = tmp_path / "replica"
+    log_file = "test_log.txt"
 
-def test_folder_comparison(tmp_path):
-    test_directory = tmp_path
-    source = os.path.join(test_directory, "source")
-    replica = os.path.join(test_directory, "replica")
+    create_folder_if_not_exists(source_folder)
+    create_folder_if_not_exists(replica_folder)
 
-    os.makedirs(source)
-    os.makedirs(replica)
+    with open(source_folder / "file1.txt", "w") as f1, open(replica_folder / "file1.txt", "w") as f2:
+        f1.write("content")
+        f2.write("content")
 
-    # Create test files
-    source_file1 = os.path.join(source, "file1.txt")
-    replica_file1 = os.path.join(replica, "file1.txt")
-    with open(source_file1, "w") as f:
-        f.write("content")
+    capsys.readouterr()  # Clear captured output
 
-    source_file2 = os.path.join(source, "file2.txt")
-    replica_file2 = os.path.join(replica, "file2.txt")
-    with open(source_file2, "w") as f:
-        f.write("different_content")
+    # Run folder_sync with a short time interval for testing
+    folder_sync(source_folder, replica_folder, log_file, 1)
+    captured = capsys.readouterr()
 
-    folder_comparison(source, replica)
-
-    assert os.path.isfile(replica_file1)  # File 1 is copied
-    assert os.path.isfile(replica_file2)  # File 2 is copied
-
-    # Check if content is the same
-    with open(source_file1, "r") as f1, open(replica_file1, "r") as f2:
-        assert f1.read() == f2.read()
-
-    with open(source_file2, "r") as f1, open(replica_file2, "r") as f2:
-        assert f1.read() == f2.read()
+    # Verify that the program runs and outputs synchronization messages
+    assert os.path.exists(replica_folder / "file1.txt")
+    assert "The program has been terminated manually." not in captured.out

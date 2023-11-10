@@ -22,4 +22,4 @@ This Python program provides a simple folder synchronization utility. It allows 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/folder-sync-python.git
+   git clone https://github.com/CarlosPimentel10/sync_folders_python.git
